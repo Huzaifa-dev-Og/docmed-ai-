@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docmed.ai </title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom font and base styling */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f6f9; /* Light background */
+        }
+        /* Container to mimic the centered white area */
+        .main-content {
+            background-color: white;
+            padding: 3rem 1.5rem;
+            max-width: 768px; /* Max width for a clean look */
+            min-height: 100vh;
+        }
+        /* Title styling matching the screenshot's large, bold font */
+        .app-title {
+            font-size: 2.5rem; 
+            font-weight: 800;
+            color: #1f2937; 
+        }
+        /* Style for the main output card */
+        .info-card {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex justify-center">
+
+    <div class="w-full main-content">
+        <div class="w-full max-w-lg mx-auto">
+            
+            <!-- Header Section -->
+            <header class="text-center mb-10">
+                <h1 class="app-title flex justify-center items-center">
+                    <!-- Using 'microscope' to visually approximate the search icon while being health-related -->
+                    <i data-lucide="microscope" class="w-10 h-10 mr-3 text-blue-600"></i> 
+                    Docmed - health assistant
+                </h1>
+                <p class="text-md text-gray-500 mt-2">
+                    Ask for general, educational information about any health topic and solutions over it.
+                </p>
+            </header>
+
+            <!-- Input and Button Section -->
+            <div class="flex gap-3 mb-8">
+                <input 
+                    type="text" 
+                    id="medicalPrompt" 
+                    placeholder="e.g., Common cold symptoms and relief" 
+                    class="flex-grow p-4 text-gray-700 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                    onkeydown="if(event.key === 'Enter') getMedicalInfo()"
+                >
+                <button 
+                    onclick="getMedicalInfo()" 
+                    class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-blue-600 transition duration-200 active:scale-[0.98] whitespace-nowrap"
+                >
+                    Get Info
+                </button>
+            </div>
+                
+            <div id="loading" class="hidden text-center text-blue-500 font-medium my-4">
+                <svg class="animate-spin h-5 w-5 mr-3 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Consulting Assistant...
+            </div>
+
+            <div id="outputArea" class="mt-4">
+                <!-- Output will be displayed here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Use the port where your Flask backend is running
+        const MEDICAL_API_URL = 'http://localhost:5000/api/get-medical-info';
+
+        /**
+         * Fetches and displays medical information from the backend API.
+         */
+        async function getMedicalInfo() {
+            const promptElement = document.getElementById('medicalPrompt');
+            const outputArea = document.getElementById('outputArea');
+            const loadingElement = document.getElementById('loading');
+            const prompt = promptElement.value.trim();
+
+            if (!prompt) {
+                outputArea.innerHTML = '<p class="p-4 bg-yellow-100 text-yellow-800 rounded-lg font-medium">Please enter a health question or topic.</p>';
+                return;
+            }
+
+            // Reset UI and show loading
+            loadingElement.classList.remove('hidden');
+            outputArea.innerHTML = '';
+
+            try {
+                // 1. Fetch data from the backend
+                const response = await fetch(MEDICAL_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: prompt })
+                });
+
+                // 2. Hide loading indicator immediately after response is received
+                loadingElement.classList.add('hidden');
+
+                // 3. Handle non-successful responses (e.g., 400, 500)
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    const errorMessage = errorData.error || response.statusText;
+                    outputArea.innerHTML = `<div class="p-4 bg-red-100 text-red-800 rounded-lg font-medium">
+                        <strong>API Error:</strong> Could not retrieve information. Server response: ${errorMessage}
+                    </div>`;
+                    return;
+                }
+
+                // 4. Process successful response
+                const jsonResponse = await response.json();
+                const medicalInfo = jsonResponse.data;
+
+                // Prepare list HTML
+                const symptomsHtml = medicalInfo.common_symptoms && medicalInfo.common_symptoms.length > 0
+                    ? `<ul class="list-disc pl-5 space-y-1">${medicalInfo.common_symptoms.map(s => `<li>${s}</li>`).join('')}</ul>`
+                    : '<p class="text-gray-500 italic">No specific common symptoms listed.</p>';
+                
+                const actionsHtml = medicalInfo.recommended_actions && medicalInfo.recommended_actions.length > 0
+                    ? `<ol class="list-decimal pl-5 space-y-1">${medicalInfo.recommended_actions.map(a => `<li>${a}</li>`).join('')}</ol>`
+                    : '<p class="text-gray-500 italic">No specific actions recommended.</p>';
+
+                // 5. Construct the final output HTML
+                let html = `
+                    <div class="info-card bg-white p-6 md:p-8 rounded-xl border-t-8 border-blue-500">
+                        
+                        <!-- Disclaimer Banner (The most important part) -->
+                        <div class="disclaimer-banner bg-red-50 p-4 rounded-lg mb-6 border-l-4 border-red-500">
+                            <h3 class="font-bold text-red-700 flex items-center mb-1">
+                                <i data-lucide="alert-triangle" class="w-5 h-5 mr-2"></i>
+                                MANDATORY SAFETY WARNING
+                            </h3>
+                            <p class="text-red-900 text-sm">${medicalInfo.important_disclaimer || 'Disclaimer not provided. This information is for educational purposes only and is NOT a substitute for professional medical advice.'}</p>
+                        </div>
+                        
+                        <h2 class="text-2xl font-bold text-gray-800 mb-2">${medicalInfo.potential_condition || 'Health Information'}</h2>
+                        <p class="text-gray-600 mb-6 italic border-b pb-4">Based on your query: "${medicalInfo.query}"</p>
+                        
+                        <h3 class="text-xl font-semibold text-blue-600 mt-4">Overview</h3>
+                        <p class="mt-2 text-gray-700 leading-relaxed">${medicalInfo.summary || 'Summary not available.'}</p>
+
+                        <h3 class="text-xl font-semibold text-blue-600 mt-6">Common Symptoms</h3>
+                        <div class="mt-2 text-gray-700">${symptomsHtml}</div>
+
+                        <h3 class="text-xl font-semibold text-blue-600 mt-6">Recommended General Actions</h3>
+                        <div class="mt-2 text-gray-700">${actionsHtml}</div>
+                    </div>
+                `;
+                outputArea.innerHTML = html;
+                // Re-initialize icons for the new content
+                lucide.createIcons();
+
+            } catch (error) {
+                // Handle network errors
+                loadingElement.classList.add('hidden');
+                outputArea.innerHTML = `<div class="p-4 bg-red-100 text-red-800 rounded-lg font-medium">
+                    <strong>Network Error:</strong> Could not connect to the backend server at ${MEDICAL_API_URL}. Please ensure your Python script is running.
+                </div>`;
+                console.error('Fetch error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
